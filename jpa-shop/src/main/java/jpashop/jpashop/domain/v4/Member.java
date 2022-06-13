@@ -1,4 +1,4 @@
-package jpashop.jpashop.domain.v2;
+package jpashop.jpashop.domain.v4;
 
 import javax.persistence.*;
 import java.util.ArrayList;
@@ -16,7 +16,7 @@ public class Member {
     private String street;
     private String zipcode;
 
-    @OneToMany(mappedBy = "member") // Order에 있는 member가 주인. -> Order가 주인
+    @OneToMany(mappedBy = "member")
     private List<Order> orders = new ArrayList<>();
 
     public Long getId() {

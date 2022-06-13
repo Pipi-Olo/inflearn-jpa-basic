@@ -2,7 +2,7 @@ package jpashop.jpashop.domain.v2;
 
 import javax.persistence.*;
 
-@Entity
+//@Entity
 public class OrderItem {
 
     @Id @GeneratedValue

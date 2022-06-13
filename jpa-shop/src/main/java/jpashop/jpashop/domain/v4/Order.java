@@ -1,4 +1,4 @@
-package jpashop.jpashop.domain.v2;
+package jpashop.jpashop.domain.v4;
 
 import javax.persistence.*;
 import java.time.LocalDateTime;
@@ -15,6 +15,10 @@ public class Order {
     @ManyToOne
     @JoinColumn(name = "MEMBER_ID")
     private Member member;
+
+    @OneToOne
+    @JoinColumn(name = "DELIVERY_ID")
+    private Delivery delivery;
 
     @OneToMany(mappedBy = "order")
     private List<OrderItem> orderItems = new ArrayList<>();

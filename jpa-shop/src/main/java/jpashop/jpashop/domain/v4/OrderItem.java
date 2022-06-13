@@ -1,4 +1,4 @@
-package jpashop.jpashop.domain.v3;
+package jpashop.jpashop.domain.v4;
 
 import javax.persistence.*;
 
