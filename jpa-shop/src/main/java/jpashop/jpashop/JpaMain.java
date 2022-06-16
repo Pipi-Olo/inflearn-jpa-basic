@@ -1,7 +1,6 @@
 package jpashop.jpashop;
 
-import jpashop.jpashop.domain.v5.Album;
-import jpashop.jpashop.domain.v5.Item;
+import jpashop.jpashop.domain.v6.Album;
 
 import javax.persistence.EntityManager;
 import javax.persistence.EntityManagerFactory;

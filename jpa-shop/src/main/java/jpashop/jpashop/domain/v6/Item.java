@@ -1,11 +1,11 @@
-package jpashop.jpashop.domain.v5;
+package jpashop.jpashop.domain.v6;
 
 import javax.persistence.*;
 
-//@Entity
+@Entity
 @Inheritance(strategy = InheritanceType.TABLE_PER_CLASS)
 @DiscriminatorColumn
-public abstract class Item {
+public abstract class Item extends BaseEntity {
 
     @Id @GeneratedValue
     private Long id;

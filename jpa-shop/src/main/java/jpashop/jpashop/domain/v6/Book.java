@@ -1,9 +1,9 @@
-package jpashop.jpashop.domain.v5;
+package jpashop.jpashop.domain.v6;
 
 import javax.persistence.DiscriminatorColumn;
 import javax.persistence.Entity;
 
-//@Entity
+@Entity
 @DiscriminatorColumn
 public class Book extends Item {
 
