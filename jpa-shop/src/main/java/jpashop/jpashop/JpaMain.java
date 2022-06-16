@@ -1,5 +1,8 @@
 package jpashop.jpashop;
 
+import jpashop.jpashop.domain.v5.Album;
+import jpashop.jpashop.domain.v5.Item;
+
 import javax.persistence.EntityManager;
 import javax.persistence.EntityManagerFactory;
 import javax.persistence.EntityTransaction;
@@ -14,7 +17,12 @@ public class JpaMain {
         tx.begin();
 
         try {
+            Album album = new Album();
+            album.setName("itemName");
+            album.setPrice(10000);
 
+            em.persist(album);
+            tx.commit();
         } catch (Exception e) {
             tx.rollback();
         } finally {
