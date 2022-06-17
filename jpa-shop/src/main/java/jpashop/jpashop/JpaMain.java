@@ -2,6 +2,8 @@ package jpashop.jpashop;
 
 import jpashop.jpashop.domain.v7.Member;
 import jpashop.jpashop.domain.v7.Team;
+import jpashop.jpashop.domain.v8.Child;
+import jpashop.jpashop.domain.v8.Parent;
 
 import javax.persistence.EntityManager;
 import javax.persistence.EntityManagerFactory;
@@ -18,32 +20,22 @@ public class JpaMain {
         tx.begin();
 
         try {
-            Team teamA = new Team();
-            teamA.setName("TeamA");
-            em.persist(teamA);
+            Child child1 = new Child();
+            Child child2 = new Child();
 
-            Team teamB = new Team();
-            teamB.setName("TeamB");
-            em.persist(teamB);
+            Parent parent = new Parent();
+            parent.addChild(child1);
+            parent.addChild(child2);
 
-            Member member = new Member();
-            member.setUsername("member");
-            member.setTeam(teamA);
-            em.persist(member);
-
-            Member member2 = new Member();
-            member2.setUsername("member");
-            member2.setTeam(teamB);
-            em.persist(member2);
+            em.persist(parent);
+//            em.persist(child1);
+//            em.persist(child2);
 
             em.flush();
             em.clear();
 
-            List<Member> members = em.createQuery("select m from Member m join fetch m.team", Member.class).getResultList();
-
-//            Member m = em.find(Member.class, member.getId());
-//            System.out.println("m.getClass() = " + m.getClass());
-//            System.out.println("m.getTeam().getClass() = " + m.getTeam().getClass());
+            Parent findParent = em.find(Parent.class, 1L);
+            findParent.getChildren().remove(0);
 
             tx.commit();
         } catch (Exception e) {

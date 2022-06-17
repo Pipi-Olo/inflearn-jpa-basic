@@ -4,7 +4,7 @@ import org.hibernate.annotations.LazyToOne;
 
 import javax.persistence.*;
 
-@Entity
+//@Entity
 public class Member {
 
     @Id @GeneratedValue
