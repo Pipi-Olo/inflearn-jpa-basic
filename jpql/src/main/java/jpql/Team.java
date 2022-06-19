@@ -13,8 +13,7 @@ public class Team {
     @Id @GeneratedValue
     private Long id;
 
-    private String username;
-    private Integer age;
+    private String name;
 
     @OneToMany(mappedBy = "team")
     private List<Member> members = new ArrayList<>();
@@ -27,20 +26,12 @@ public class Team {
         this.id = id;
     }
 
-    public String getUsername() {
-        return username;
+    public String getName() {
+        return name;
     }
 
-    public void setUsername(String username) {
-        this.username = username;
-    }
-
-    public Integer getAge() {
-        return age;
-    }
-
-    public void setAge(Integer age) {
-        this.age = age;
+    public void setName(String name) {
+        this.name = name;
     }
 
     public List<Member> getMembers() {
