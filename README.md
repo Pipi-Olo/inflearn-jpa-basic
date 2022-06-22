@@ -120,3 +120,106 @@ member1 != member2
   * 데이터베이스 방언을 사용해 `JPQL`을 통해 `SQL`을 만든다.
 
 ---
+
+# 영속성 컨텍스트❗
+* 엔티티를 영구적으로 저장하는 환경을 제공한다.
+* `EntityManager`를 통해 영속성 컨텍스트에 접근한다.
+* `EntityManager.persist(member)` → **데이터베이스에 저장하는 것이 아니다.** 영속성 컨텍스트에 저장하는 것이다.
+
+## 엔티티 생명주기
+![](https://velog.velcdn.com/images/pipiolo/post/2f8098db-bfb6-4afa-864d-ce2d0b035976/image.png)
+
+* 비영속 (new / transient)
+  * 영속성 컨텍스트와 관계가 없는 상태
+* 영속 (managed)
+  * `em.persist(member)`
+  * 영속성 컨텍스트에 관리되는 상태
+* 준영속 (detached)
+  * `em.detach(member)`
+  * 영속성 컨텍스트에 저장된 엔티티를 분리한 상태
+* 삭제 (removed)
+  * `em.remove(member)`
+  * 엔티티를 삭제한 상태
+  
+## 영속성 컨텍스트 이점
+* 1차 캐시
+* 동일성 보장 (Identity)
+* 트랜잭션을 지원하는 쓰기 지연 (Transaction Write-Behind)
+* 변경 감지 (Dirty Checking)
+* 지연 로딩 (Lazy Loading)
+
+### 1차 캐시
+![](https://velog.velcdn.com/images/pipiolo/post/61079587-e9f3-4472-a5e1-0f53631a0b8d/image.png)
+
+* **영속성 컨텍스트의 물리적 위치**
+* 식별자(`@Id`)를 통해서 엔티티를 식별한다.
+  * 영속되기 위해서는 식별자가 반드시 필요하다.
+* `em.find(memberId)`
+  * 데이터베이스에서 직접 조회하는 것이 아니다. **1차 캐시에서 조회한다.**
+  * 1차 캐시에 없는 경우, 데이터베이스를 조회해서 1차 캐시에 저장한다. 결국 1차 캐시에서 엔티티를 조회한다.
+  
+> **참고**
+> 애플리케이션 전체에서 공유하는 캐시를 `2차 캐시`라 한다.
+  
+### 동일성 보장
+```java
+Member member1 = em.find(memberId);
+Member member2 = em.find(memberId);
+
+member1 == member2 // true
+```
+* 1차 캐시에서 엔티티를 읽어오기 때문에 동일성을 보장한다.
+  * 동일성 (Identity) → 두 객체가 완전히 같다는 뜻으로 주소 값이 같다.
+  * 동등성 (Equality) → 두 객체가 같은 정보를 갖고 있다는 뜻으로 `equals()` 메소드를 통해 판단한다.
+* 반복 가능한 읽기(Repeatable Read) 트랜잭션 격리 수준이 데이터베이스가 아닌 애플리케이션 차원에서 제공된다.
+
+### 트랜잭션을 지원하는 쓰기 지연
+![](https://velog.velcdn.com/images/pipiolo/post/be8378f3-f321-4c10-95f7-9ec4ecad9314/image.png)
+
+* `em.persist(memberA)`
+  * 데이터베이스에 저장하지 않고 영속성 컨텍스트에 저장한다.
+  * `INSERT SQL`을 생성해서 쓰기 지연 SQL 저장소에 모아둔다.
+* `transaction.commit()`
+  * 트랜잭션 커밋이 발생하면 모아둔 SQL들을 데이터베이스에 반영한다.
+* 데이터베이스에 접근하는 횟수를 줄어 성능이 향상된다.
+
+### 변경 감지
+![](https://velog.velcdn.com/images/pipiolo/post/02b9c20a-7b20-4c34-abe2-4a8a209fde2d/image.png)
+
+```java
+transaction.begin();
+
+Member member = em.find(memberId);
+
+member.setName("Hello JPA");
+member.setAge(25);
+
+transaction.commit(); // 커밋하면 내부적으로 플러쉬가 발생한다.
+```
+
+* 엔티티가 영속되는 순간에 스냅샷을 저장한다.
+* `flush()`가 발생하면 현 엔티티와 스냅샷을 비교해서 차이점을 찾는다.
+* 차이점이 있으면 UPDATE SQL을 생성해서 쓰기 지연 SQL 저장소에 저장한다.
+* 데이터베이스에 반영한다.
+* `em.update(member)` 코드가 없어도 엔티티를 변경하면 플러시 시점에 자동으로 데이터베이스에 반영된다.
+
+### 지연 로딩
+> 지연 로딩에 대한 설명은 뒤에서 진행하겠다.
+
+## 플러시
+* 영속성 컨텍스트의 변경내용을 데이터베이스에 동기화한다.
+* `flush()`를 호출하려면
+  * `em.flush()` → 플러시 직접 호출
+  * 트랜잭션 커밋 → 플러시 자동 호출
+  * JPQL 쿼리 실행 → 플러시 자동 호출
+* `flush()`가 발생하면
+  * 엔티티들의 변경을 감지한다.
+  * 생성된 SQL을 `쓰기 지연 SQL 저장소`에 등록한다.
+  * 저장소에 모아둔 SQL을 데이터베이스에 전송한다.
+* **영속성 컨텍스트는 그대로 있다.** 변경되거나 삭제되지 않는다.
+* 커밋 직전에만 동기화하면 되기 때문에 트랜잭션 단위가 중요하다.
+* 영속 혹은 삭제 상태 엔티티만 데이터베이스에 반영된다.
+  * 준영속 상태 엔티티는 영속성 컨텍스트가 제공하는 혜택을 못 받는다.
+  * `em.detach(entity)`, `em.clear()`, `em.close()`
+
+---
