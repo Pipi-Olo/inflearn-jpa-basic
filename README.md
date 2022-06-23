@@ -223,3 +223,208 @@ transaction.commit(); // 커밋하면 내부적으로 플러쉬가 발생한다.
   * `em.detach(entity)`, `em.clear()`, `em.close()`
 
 ---
+
+# 엔티티 매핑 ✓
+* 객체와 테이플 매핑 : `@Entity`, `@Table`
+* 필드와 컬럼 매핑 : `@Column`
+* 기본키 매핑 : `@Id`
+* 연관관계 매핑 : `@ManyToOne`, `@JoinColumn`
+
+## 객체와 테이플 매핑
+### @Entity
+* `@Entity`가 붙은 클래스를 JPA가 관리하며, 엔티티라 한다.
+* 기본 생성자가 필수이다.
+* final, inner 클래스, enum, interface는 엔티티가 불가능하다.
+* final 필드는 저장되지 않는다.
+* 속성
+  * name
+    * JPA 에서 사용할 **엔티티 이름**을 지정한다. 테이블 이름과 무관하다.
+    * 기본 값은 클래스 이름이다.
+
+### @Table
+* 엔티티와 매핑할 테이블을 지정한다.
+* 속성
+  * name
+    * 매핑할 테이블 이름일 지정한다.
+    * 기본 값은 엔티티 이름이다.
+  * catalog
+  * schema
+  * uniqueConstraints(DDL)
+    * DDL 생성 시, 유니크 제약 조건을 생성한다.
+    
+> 데이터베이스 스키마 자동 생성 (Data Definition Language)
+> `DDL`이란 데이터 생성, 수정, 삭제 등 데이터 전체의 골격을 결정하는 역할을 지닌, 데이터베이스를 정의하는 언어이다. 데이터베이스 방언을 참고해 애플리케이션 실행 시점에 자동으로 생성한다. DDL은 애플리케이션 실행 시점에만 사용되고 JPA 실행 로직에는 영향을 주지 않는다.
+> ```java
+> <property name="hibernate.hbm2ddl.auto" value="..."/>
+> 
+> * create : 기존 테이블 삭제 후 생성한다. (drop-create)
+> * create-drop : 종료 시점에 테이블을 삭제한다.
+> * update : 변경된 내용만 반영한다. 데이터가 유지된다.
+> * validate : 엔티티-테이블 매핑이 정상인지 확인한다.
+> * none : 아무것도 안 한다.
+> ```
+> * 개발 서버 : create 또는 update
+> * 테스트 서버 : update 또는 validate
+> * 운영 서버 : validate 또는 none
+
+## 필드와 컬럼 매핑
+```java
+ @Entity
+ public class Member {
+   
+   @Id
+   private Long id;
+   
+   @Column(name = "name")
+   private String username;
+
+   private Integer age;
+ 
+   @Enumerated(EnumType.STRING)
+   private RoleType roleType;
+ 
+   @Temporal(TemporalType.TIMESTAMP)
+   private Date createdDate;
+ 
+   @Temporal(TemporalType.TIMESTAMP)
+   private Date lastModifiedDate;
+ 
+   @Lob
+   private String description;
+}
+```
+
+* @Column → 컬럼을 매핑한다.
+* @Enumerated → enum 타입 매핑한다.
+* @Temporal → 날짜 타입을 매핑한다.
+* @Lob → BLOB, CLOB 매핑한다.
+* @Transient → 특정 필드를 매핑하지 않는다.
+* 엔티티 클래스 필드에 매핑을 생략하면 @Column이 적용된다.
+
+### @Column
+* 해당 필드를 컬럼에 매핑한다.
+* 속성
+  * name
+    * 필드와 매핑할 테이블 컬럼의 이름을 지정한다.
+    * 객체의 필드 이름이 기본 값이다.
+  * insertable / updatable
+    * 등록, 변경 가능 여부를 결정한다.
+    * `true`가 기본 값이다.
+  * nullable (DDL)
+    * null 값의 적용 여부를 결정한다.
+    * `false`이면 해당 컬럼에 not null 제약 조건이 붙는다.
+  * unique (DDL)
+    * 유니크 제약 조건을 걸 때 사용한다.
+    * 일반적으로 `@Table`의 uniqueConstraints를 사용한다.
+  * columnDefinition (DDL)
+    * 데이터베이스 컬럼 정보를 직접 줄 수 있다.
+  * length (DDL)
+    * 문자 길이 제약 조건을 추가한다.
+    * `String` 타입에만 적용 가능하다.
+    * 기본 값은 255이다.
+  * precision, sacle (DDL)
+    * `BigDecimal` 타입에 사용한다.
+    * 아주 큰 숫자나 정밀한 소수를 다룰 때 사용한다.
+    * 기본 값은 precision = 19, scale = 2이다.
+
+### @Enumerated
+* 자바 enum 타입을 매핑할 때 사용한다.
+* 속성
+  * value
+    * EnumType.ORDINAL → enum 순서(1, 2, 3 ...) 값을 데이터베이스에 저장한다.
+    * EnumType.STRING → enum 이름을 데이터베이스에 저장한다.
+    * 기본 값은 ORDINAL이지만, 무조건 `STRING` 사용한다.
+    
+> EnumType.ORDINAL
+> enum 순서가 변경되어도, 이미 저장된 데이터들의 값이 변경되지 않는다. 모든 데이터의 값을 변경해야 하는 문제가 발생한다. `EnumType.STRING`을 사용하자.
+    
+### @Temporal
+* 날짜 타입(Date, Calendar)을 매핑할 때 사용한다.
+* 속성
+  * value
+    * TemporalType.DATE → 날짜를 매핑한다. 예) 2013-10-11
+    * TemporalType.TIME → 시간을 매핑한다. 예) 11:14:34
+    * TemporalType.STAMP → 날짜와 시간을 매핑한다. 예) 2013-10-11 11:14:34
+
+> LocalDate, LocalDateTime 사용할 때는 `@Temporal` 생략한다.
+> LocalDate → TemporalType.DATE
+> LocalDateTime → TemporalType.STAMP 자동 매핑된다.
+
+### @Lob
+* 데이터베이스 CLOB, BLOB 타입과 매핑된다.
+* `@Lob`는 속성이 없다.
+* 매핑하는 필드 타입이 문자면 CLOB 매핑, 나머지는 BLOB 매핑이 된다.
+
+### @Transient
+* 해당 필드를 매핑하지 않는다.
+* 해당 필드는 데이터베이스에 저장되지 않는다.
+* 메모리에서 임시로 값을 보관할 때 사용한다.
+
+## 기본키 매핑
+```java
+@Id @GeneratedValue(strategy = GenerationType.XXX)
+private Long id;
+```
+* `@Id` → 엔티티 식별자, 테이블 PK로 사용된다.
+* `@GeneratedValue` → 기본 키를 자동으로 생성한다.
+  * IDENTITY → 데이터베이스에 위임한다. ex) `MySQL`
+  * SEQUENCE → 데이터베이스 시퀀스 오브젝트를 사용한다. ex) `Oracle`
+  * AUTO → 데이터베이스 방언에 따라 `IDENTITY`, `SEQUENCE` 중 하나를 자동으로 지정한다. 기본 값이다.
+  * TABLE → 키 생성 전용 테이블을 생성한다. 해당 키 생성 테이블은 데이터베이스 내 모든 테이블에서 사용한다.
+  
+### IDENTITY 전략
+* 기본 키 생성을 데이터베이스에 위임한다.
+* MySQL, PostgreSQL, SQL Server 에서 사용된다.
+* JPA는 `transaction.commit()` 시점에 `INSERT SQL`을 실행한다.
+* 하지만, `IDENTITY` 전략은`em.persist(entity)` 시점에 즉시 `INSERT SQL` 실행하고 데이터베이스에서 식별자를 조회한다. 
+  * 영속성 컨텍스트가 엔티티를 관리하기 위해서는 식별자(`@Id`)가 필요하다.
+  * `@Id` 생성을 데이터베이스에게 위임했으니, 데이터베이스로부터 식별자를 받아야 영속성 컨텍스트에서 엔티티 관리가 가능하다.
+  * 유의미한 성능 차이는 없다.
+
+### SEQUENCE 전략
+```java
+@Entity
+@SequenceGenerator(
+    name = "MEMBER_SEQ_GENERATOR",
+    sequenceName = "MEMBER_SEQ",
+    initialValue = 1,
+    allocationSize = 1)
+public class Member {
+
+  @Id 
+  @GeneratedValue(strategy = GenerationType.SEQUENCE,
+          generatir = "MEMBER_SEQ_GENERATOR")
+  private Long id;
+}
+```
+
+* 데이터베이스 시퀀스는 유일한 값을 순서대로 생성하는 데이터베이스 기술이다.
+* Orcle, H2 Database 에서 사용된다.
+* `@SequenceGenerator`가 필요하다.
+  * 엔티티를 생성할 때, `Sequence`를 조회하는 쿼리를 보내서 `id` 값을 얻고 매핑한다.
+  * `allocationSize` → 쿼리를 통해 한 번 `id` 값을 얻을 때, 가져올 개수를 말한다.
+    * 기본 값(`50`)일 경우, `MEMBER_SEQ_1` ~ `MEMBER_SEQ_50`까지 한 번에 식별자를 얻어온다.
+    * 51번째 식별자가 필요할 때, `MEMBER_SEQ_51` ~ `MEMBER_SEQ_100`까지 얻는다.
+* `IDENTITY`전략과 다르게 `SELECT SQL`을 통해 식별자를 얻는다.
+* 하나의 데이터베이스에 동시에 여러 접근을 해도 문제없다.
+
+### TABLE 전략
+* 키 생성 전용 테이블을 만들어 데이터베이스 시퀀스 전략을 흉내낸다.
+* 하나의 테이블로 모든 테이블의 식별자 문제를 해결가능하다.
+* <span style="color: #FF8C00">성능이 좋지 않다. 쓰지 말자.</span>
+
+### Long + 대체키 + 키 생성 전략❗
+* 기본 키 제약 조건
+  * NULL ❌
+  * 유일해야 한다.
+  * 변하면 안 된다.
+* 미래에도 이 조건을 만족하는 자연키는 없다. 대체키를 사용하자.
+* 비지니스 변화에 유연하게 대처할 수 있다.
+* 주민등록번호도 적절하지 않다.
+  * 주민등록번호 관련 법률, 정책 변화로 인해 미래에 어떻게 변화할지 아무도 모른다.
+
+### 연관관계 매핑
+
+> 연관관계 매핑에 대한 설명은 다음 장에서 진행하겠다.
+
+---
