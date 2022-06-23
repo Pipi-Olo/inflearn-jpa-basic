@@ -428,3 +428,333 @@ public class Member {
 > 연관관계 매핑에 대한 설명은 다음 장에서 진행하겠다.
 
 ---
+
+# 연관관계 매핑
+## 객체 지향 모델링
+```java
+@Entity
+public class Member {
+
+  @Id @GeneratedValue
+  private Long id;
+  
+  private Team team     // 객체 지향 모데링
+  private Long team_id; // 테이블 중심 모델링
+}
+
+Member member = em.find(member.getId());
+Team team = em.find(member.getTeamId()); // Team team = member.getTeam();
+```
+
+* 객체와 테이블간의 패러다임 차이를 해결해야 한다.
+  * 객체는 참조를 사용해서 연관된 객체를 찾는다.
+  * 테이블은 외래 키 조인을 사용해서 연관된 테이블을 찾는다.
+* 객체를 테이블 중심 모델링을 하면, 자바 컬렉션 처럼 `member.getTeam()`으로 데이터에 접근할 수 없다.
+* 개발자는 `객체 지향 모델링`을 사용하자. 테이블에 대한 외래키 조인은 JPA가 해결한다.
+
+## 연관관계 매핑 고려사항 3가지
+* 방향 → `단방향`, `양방향`
+  * 테이블 : 단방향 개념이 없다. 외래 키 조인 하나로 양방향으로 조회 가능하다. (A ↔ B)
+  * 객체 : 양방향 개념이 없다. 단방향 2개가 있을 뿐이다. (A → B, A ← B)
+* 다중성 → `일대다 (1:N)`, `다대일 (N:1)`, `일대일 (1:1)`, `다대다 (N:M)`
+  * `일대다`는 `일`을 연관관계 주인으로,
+  * `다대일`은 `다`를 연관관계 주인으로 설정한다는 뜻이다.
+* 연관관계 주인
+  * 객체 양방향 연관관계는 테이블의 외래 키를 관리하는 `주인`을 정해야 한다.
+  * 주인이 아닌 엔티티는 외래 키에 영향을 주지 않는다. 단순 조회만 가능하다.
+
+## 방향
+### 객체와 테이블의 양방향 연관관계 패러다임 차이
+![](https://velog.velcdn.com/images/pipiolo/post/047addef-610d-43ac-aa7a-e4b3bd17933d/image.png)
+
+
+* 객체의 양방향 관계는 사실 **서로 다른 단방향 관계 2개**이다.
+  * 객체 연관관계 2개
+    * 회원 → 팀 : 단방향 연관관계 1개, `member.getTeam()`
+    * 팀 → 회원 : 단방향 연관관게 1개, `team.getMembers()`
+  * 양방향 연관관계 없다.
+* 테이블은 **외래 키 하나**로 앙방향 연관관계를 가진다.
+  * 테이블 연관관계 1개
+    * 회원 ↔ 팀 양방향 연관관계 1개
+    * 외래 키 하나로 테이블 양쪽으로 조인할 수 있다.
+  * 단방향 연관관계 없다.
+
+> **참고**
+> `Member`가 속한 `Team`을 변경할 때, 
+> `Team`에서 `Member`를 추가해야 할 까? 아니면 `Member`에서 `Team`을 변경해야 할 까?
+> **두 객체 중 하나를 양방향 연관관계의 주인으로 지정해야 한다.**
+
+## 양방향 연관관계의 주인 (Owner)
+```java
+@Entity
+public class Member {
+
+  @Id @GeneratedValue
+  private Long id;
+  
+  @ManyToOne
+  private Team team;
+}
+
+@Entity
+public class Team {
+
+  @Id @GeneratedValue
+  private Long id;
+
+  @OneToMany(mappedBy = "team")
+  private List<Member> members = new ArrayList<>();
+}
+```
+
+* **외래 키를 가지고 있는 테이블이 `주인`이다.**
+  * Member 테이블에 TEAM_ID 외래 키가 있으므로 Member가 `주인`이다.
+  * 일대다(1:N), 다대일(N:1) 관계에서 주인은 항상 `다(N)`이다.
+  * 연관관계 주인은 비지니스와 연관이 없다. 오직 외래 키 여부로 결정한다.
+* 연관관계의 주인만이 엔티티를 등록 및 수정할 수 있다.
+* 주인이 아닌 엔티티는 읽기만 가능하다.
+  * 주인이 아닌 엔티티는 `mappedBy` 속성으로 주인을 지정한다.
+    * `(mappedBy = "team)"`은 `Member.team`이 주인이라는 뜻이다.
+  * `team.getMembers().add(member)` → 역방향(주인이 아닌 방향) 연관관계 설정은 데이터베이스에 반영되지 않는다.
+
+![](https://velog.velcdn.com/images/pipiolo/post/f197b32f-746f-4ba7-a8f3-b785c603c8b8/image.png)
+
+```java
+@Entity
+public class Member {
+
+  @Id @GeneratedValue
+  private Long id;
+  
+  @ManyToOne
+  private Team team;
+  
+  // 연관관계 편의 메소드
+  public void changeTeam(Team team) {
+    this.team = team;
+    team.getMembers().add(this);
+  }
+}
+
+@Entity
+public class Team {
+
+  @Id @GeneratedValue
+  private Long id;
+
+  @OneToMany(mappedBy = "team")
+  private List<Member> members = new ArrayList<>();
+}
+```
+
+* 객체 단방향 매핑만으로도 테이블 연관관계 매핑은 완료되었다.
+  * **테이블에 영향을 주지 않기 때문에**, 객체 양방향 매핑은 필요할 때 추가하면 된다.
+  * 테이블은 외래 키 하나로 양방향 연관관계 매핑을 완료했기 때문이다.
+* 객체 양방향 매핑은 객체 그래프 역방향 조회 기능이 추가된 것 뿐이다.
+* 객체 양방향 매핑 시, 항상 양쪽에 값을 설정한다.
+  * 연관관계 `편의 메소드`를 사용한다.
+  * `team.getMembers().add(this)`는 데이터베이스에 반영되지 않는다. 하지만, 자바의 객체 관점에서 추가하는 것이 좋다.
+* 객체 양방향 매핑 시, 무한 루프를 주의한다.
+  * toString(), @Lombok → `toString()` 메소드에서 Member ↔ Team 서로를 계속해서 호출하는 무한 루프 오류가 발생한다.
+  * JSON 생성 라이브러리 → `Controller`에서 엔티티 반환 시, JSON 자동 변환기에서 무한 루프 오류가 발생한다.  
+    * `Controller`는 엔티티를 반환하지 않는다. `Controller`는 항상 DTO를 반환한다.
+    * `DTO`는 무한 루프가 발생하지 않도록 단방향 관계로 설계한다.
+* **처음에는 단방향 관계만 설정한다. 양방향 관계는 필요할 때 추가한다. 테이블에 영향을 주지 않으니 문제없다.**
+
+## 다중성
+### 다대일 (N : 1), @ManyToOne
+외래 키를 가진 `다` 엔티티가 연관관계의 `주인`이다.
+
+```java
+@Entity
+public class Team {
+
+  @Id @GeneratedValue
+  private Long id;
+  
+  @OneToMany(mappedBy = "team") // Member.team 이 주인이라는 뜻이다.
+  private List<Member> members = new ArrayList<>();
+}
+
+@Entity
+public class Member {
+
+  @Id @GeneratedValue
+  private Long id;
+  
+  @ManyToOne
+  @JoinColumn(name = "team_id")
+  private Team team;
+}
+```
+
+* 다대일 단방향 → 가장 많이 사용하는 연관관계 매핑 방법이다. 
+* 다대일 양방향 → 연관관계 `편의 메소드`를 만들어 주자.
+  * 주인이 아닌 `Team`은 조회만 가능하다. `team.getMembers.addMember(member)`는 데이터베이스에 반영되지 않는다.
+  * 무한 루프를 주의하자.
+
+### 일대다 (1 : N), @OneToMany
+실제 외래키는 `다` 테이블이 가지고 있지만, `일`을 외래 키를 관리하는 주인으로 설정한 매핑이다.
+`다대일` 연관관계 매핑을 사용하자.
+
+```java
+@Entity
+public class Team {
+
+  @Id @GeneratedValue
+  private Long id;
+
+  @OneToMany
+  @JoinColumn(name = "team_id")
+  private List<Member> members = new ArrayList<>();
+}
+
+@Entity
+public class Member {
+
+  @Id @GeneratedValue
+  private Long id;
+}
+```
+* 일대다 단방향 → `다대일 양방향`을 사용하자.
+  * 패러다임 차이때문에 반대편 테이블이 외래 키를 관리하는 특이한 구조
+    * 엔티티가 관리하는 참조가 다른 테이블의 외래 키에 있다.
+    * 연관관계 관리를 위한 추가 `UPDATE SQL`이 실행된다.
+  * `@JoinColumn`이 필수이다.
+    * 생략할 경우 중간에 테이블을 하나 추가하는 조인 테이블 방식을 사용한다.
+  * 반드시 `Team`이 `Member`를 관리해야 한다면 `다대일 양방향`을 사용하자.
+* 일대다 양방향 → 존재하지 않는 매핑이다. `다대일 양방향`을 사용하자.
+  * 존재하지 않는 매핑 방법이지만 반드시 사용해야한다면, `@JoinColumn(insertable=false, updatable=false)` 설정하면 된다.
+
+### 일대일 (1 : 1), @OneToOne
+`주 테이블`이나 `대상 테이블` 중 외래 키를 선택할 수 있다. 어차피 그 반대도 일대일 관계이기 때문이다.
+외래 키에 데이터베이스 유니크 제약조건을 추가하자.
+
+```java
+@Entity
+public class User {
+
+    @Id @GeneratedValue
+    private Long id;
+
+    @OneToOne
+    @JoinColumn(name = "locker_id")
+    private Locker locker;   
+}
+
+@Entity
+public class Locker {
+
+    @Id @GeneratedValue
+    private Long id;
+
+    @OneToOne(mappedBy = "locker")
+    private User user;                          
+}
+```
+
+* 일대일 단방향 → `JPA`가 지원하지 않는 매핑방법이다. 불가능하다.
+* 일대일 양방향 → `다대일 양방향` 매핑과 유사하다. 외래 키가 있는 곳이 연관관계의 주인이다. 주인의 반대편은 `mappedBy`를 적용한다.
+  * 주 테이블(`User`)에 외래 키
+    * 주 객체가 대상 객체의 참조를 가지고 있는 것처럼, 주 테이블이 외래 키를 가지고 있다.
+    * 객체지향 개발자 선호한다.
+    * JPA 매핑 개념과 같다.
+    * 장점 : 주 테이블만 조회해도 대상 테이블에 데이터가 있는지 확인 가능하다.
+    * 단점 : 값이 없으민 외래키 `NULL`값이 허용된다.
+  * 대상 테이블(`Locker`)에 외래 키, 
+    * 대상 테이블에 외래키가 존재한다.
+    * 데이터베이스 개발자가 선호한다.
+    * 장점 : 일대다 관계로 변경해도 테이블 구조를 유지할 수 있다.
+    * 단점 : 프록기 기능 한계로 항상 즉시 로딩으로 작동한다. 지연 로딩으로 설정해도 즉시 로딩으로 실행된다.
+
+### 다대다 (N : M), @ManyToMany
+<span style="color: #FF8C00">실무에서 사용하지 말자.</span>
+`다대다` 관계는 정규화 테이블 2개로 표현할 수 없다. `연결 테이블`을 추가해서 일대다, 다대일 관계로 해결해야 한다.
+
+```java
+@Entity
+public class Member {
+
+    @Id @GeneratedValue
+    private Long id;
+    
+    @ManyToMany
+    @JoinTable(name = "member_product",
+            joinColumns = @JoinColumn(name = "member_id"),
+            inverseJoinColumns = @JoinColumn(name = "product_id"))
+    private List<Product> products = new ArrayList<>();
+}
+
+@Entity
+public class Product {
+
+    @Id @GeneratedValue
+    private Long id;
+    
+    @ManyToMany(mappedBy = "products")
+    private List<Member> members = new ArrayList<>();
+}
+
+```
+
+* `Member.products`가 연관관계 주인이다.
+* `@JoinTable`로 추가할 연결 테이블을 지정한다.
+  * name → 연결 테이블 이름을 지정한다.
+  * joinColumns → 연관관계 주인 `PK`를 지정한다.
+  * inverseJoinColumns → 주인 반대편 `PK`를 지정한다.
+  * `joinColumns`, `inverJoinColumns`을 합쳐서 새로운 테이블의 `(PK, FK)`가 된다.
+  
+#### 다대다 매핑의 한계
+* 실무에서는 사용하지 않는다.
+* 연결 테이블이 단순 연결만 하고 끝나지 않는다.
+  * 연결 테이블에 다른 데이터가 들어갈 수 없다.
+  * `member_id`, `product_id`이외 다른 Column을 허용하지 않는다.
+
+#### 다대다 한계 극복
+![](https://velog.velcdn.com/images/pipiolo/post/eff0cc1e-074b-4c6f-a058-b5de6f554d7f/image.png)
+
+```java
+@Entity
+public class Member {
+
+  @Id @GeneratedValue
+  private Long id;
+
+  @OneToMany(mappedBy = "member")
+  private List<Order> orders = new ArrayList<>();
+}
+
+@Entity
+public class Order {
+
+  @Id @GeneratedValue
+  private Long id;
+
+  @ManyToOne
+  @JoinColumn(name = "member_id")
+  private Member member;
+
+  @ManyToOne
+  @JoinColumn(name = "product_id")
+  private Product product;
+}
+
+@Entity
+public class Product {
+
+  @Id @GeneratedValue
+  private Long id;
+
+  @OneToMany(mappedBy = "product")
+  private List<Member> members = new ArrayList<>();
+}
+```
+
+* 연결 테이블(`Order`)을 엔티티로 승격시킨다.
+* `@ManyToMany` → `@OneToMany` + `@ManyToOne`
+* 다른 엔티티처럼 `Long + 대체키 + 키 생성 전략 ❗`을 통해 테이블 PK를 설정하자.
+* 연관관계의 주인은 연결 테이블(`Order`)이다.
+  * `(mappedBy = "member")` → `Order.member`가 연관관계 주인이다.
+  * `(mappedBy = "product")` → `Order.product`가 연관관계 주인이다.
+
+--- 
