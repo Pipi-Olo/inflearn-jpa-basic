@@ -844,3 +844,157 @@ public abstract class BasicEntity {
 > `@Entity` 클래스는 `@MappedSuperclass` 혹은 `@Entity` 클래스만 상속 가능하다.
 
 ---
+
+# 프록시와 연관관계 정리
+
+## 프록시 객체
+![](https://velog.velcdn.com/images/pipiolo/post/3c88746b-61fa-4c70-b10c-aa900bba419e/image.png)
+
+* 실제 클래스를 상속받아서 만들어진 클래스로 구조가 같다.
+* 프록시 객체는 실제 객체의 참조(`target`)을 가지고 있다.
+* 프록시 객체를 호출하면 프록시 내부에서 실제 객체의 메소드를 호출한다.
+* 클라이언트는 진짜 객체인지 프록시 객체인지 구분하지 못 한다.
+
+### 엔티티 조회
+* `em.find()` → 데이터베이스를 통해서 **실제 엔티티 객체**를 조회한다.
+* `em.getReference()` → 데이터베이스 조회를 미루는 **프록시 엔티티 객체**를 조회한다.
+  * 데이터베이스에 쿼리를 보내지 않고 마치 실제 엔티티 객체가 있는 것처럼 행동한다.
+  * 애플리케이션에서 실제 데이터를 사용할 때, 데이터베이스에 쿼리를 날린다.
+
+### 프록시 객체의 초기화
+![](https://velog.velcdn.com/images/pipiolo/post/02d309fe-c2c1-4f4c-8e0c-10918223a65d/image.png)
+
+* 프록시 객체는 처음 사용할 때 한 번만 초기화된다.
+* `초기화`란 프록시 객체의 `target` 참조에 실제 객체를 넣는 행위를 말한다.
+  * `영속성 컨텍스트`를 통해 엔티티를 얻는다.
+* 프록시 객체도 `영속성 컨텍스트`에 의해 `동일성`을 보장받는다.
+  * `영속성 컨텍스트`에 실제 엔티티 객체가 있다면, `em.getReference()`를 호출해도 프록시 객체가 아닌 실제 엔티티 객체를 얻는다.
+  * `em.getReference()`를 통해서 이미 프록시 객체를 받았다면, `em.find()`를 호출해도 실제 엔티티 객체가 아닌 프록시 객체를 얻는다.
+  * 엔티티 객체의 타입 체크는 `==`가 아닌 `instance of`를 사용해야 한다.
+    * 실제 객체인지 프록시 객체인지 구별하지 않기 때문이다.
+* 준영속 상태 엔티티는 프록시 초기화 시, 예외가 발생한다.
+  * 준영속 상태 엔티티는 `영속성 컨텍스트`가 관리하지 않기 때문에 초기화가 불가능하다.
+  
+## 즉시 로딩과 지연 로딩
+<span style="color: #FF8C00">실무에서는 지연 로딩만 사용하자.</span>
+
+* `즉시 로딩` → 연관관계에 있는 실제 객체까지 조회한다.
+* `지연 로딩` → 연관관계 엔티티들은 프록시 객체로 조회한다. 프록시 객체의 `target`이 호출될 때, 영속성 컨텍스트에서 실제 엔티티 객체를 얻는다.
+
+```java
+@Entity
+public class Team {
+
+  @Id @GeneratedValue
+  private Long id;
+
+  @OneToMany(mappedBy = "team")
+  private List<Member> members = new ArrayList<>();
+}
+
+@Entity
+public class Member {
+
+  @Id @GeneratedValue
+  private Long id;
+
+  @ManyToOne(fetch = FetchType.LAZY)
+  @JoinColumn(name = "team_id")
+  private Team team;
+}
+```
+* `Team`을 조회할 때 무조건 `Member` 엔티티까지 조회할 필요 없다.
+* `즉시 로딩`은 예상하지 못한 SQL을 생성한다.
+  * `select m from Member m` 
+  * `Member`만 조회했는데 연관관계에 있는 `Team`을 조인하는 쿼리가 데이터베이스에 날라간다.
+  * 연관관계 엔티티가 늘어날수록, 조인 쿼리가 증가한다.
+* `즉시 로딩`은 JPQL에서 `N+1 문제`가 발생한다.
+* `@ManyToOne`, `@OneToOne`은 디폴트로 `즉시 로딩`이 작동한다. → `지연 로딩`으로 변경하자.
+* `@OneToMany`, `@ManyToMany`는 디폴트로 `지연 로딩`이 작동한다.
+* <span style="color: #FF8C00">모든 연관관계에 지연 로딩만 사용하자.</span>
+
+## 영속성 전이 (Cascade)
+![](https://velog.velcdn.com/images/pipiolo/post/362340d6-bf43-4ec8-b0cc-c03ff77bbf4f/image.png)
+
+* 특정 엔티티를 영속 상태로 만들 때, 연관된 엔티티도 함께 영속 상태도 만들고 싶을 때 사용한다.
+* 특정 엔티티를 영속화할 때, 연관된 엔티티도 함께 영속화하는 편리함을 제공한다.
+  * `em.persist()`를 `parent` 1번, `child` 2번 총 3번이 필요하지만, 
+     영속성 전이를 사용하면 `parent` 1번으로 `child`까지 자동으로 영속화 해준다.
+  * 데이터베이스에 나가는 쿼리는 동일하기 때문에 성능상 이점은 없다.
+* 영속성 전이는 상속과 관련이 없다.
+  * `Parent`는 상속 관계가 아닌, 연관관계에서 `일`을 담당하는 엔티티를 말한다.
+  * `Team` : `Member` = 1 : 多 
+     → `Parent`는 `Team`을 의미한다.
+
+### 영속성 전이 종류
+* **ALL**
+* **PERSIST**
+* **REMOVE**
+* MERGE
+* REFRESH
+* DETACH
+
+#### CascadeType.PERSIST
+* 특정 엔티티를 영속화하면 연관된 엔티티도 함께 영속화한다.
+  * 엔티티를 저장할 때, 연관된 모든 엔티티들이 영속 상태이어야 한다.
+  * 이 속성을 사용하면 부모와 자식을 따로 영속화해주지 않아도 된다.
+* 부모를 삭제하면 연관된 자식은 그대로 남아있다.
+
+#### CascadeType.REMOVE
+* 특정 엔티티를 삭제하면 연관된 엔티티도 함께 삭제한다.
+* 특정 엔티티를 삭제했을 때, 연관된 다른 엔티티들은 외래 키 무결성 예외가 발생한다.
+  * 연관된 테이블의 외래 키로 연결된 `Column`이 삭제되었기 때문이다.
+  * `CascadeType.REMOVE` 옵션을 사용하지 않으면, 특정 엔티티를 지울 때 연관된 엔티티과 연관관계를 끊어야 한다.
+
+#### CascadeType.ALL
+* `CascadeType`이 제공하는 모든 속성을 적용한다.
+* 연관된 엔티티들의 생명주기를 제어할 때 사용한다.
+
+### 고아 객체
+```java
+@Entity
+public class Parent {
+
+  @Id @GeneratedValue
+  private Long id;
+
+  @OneToMany(mappedBy = "parent", orphanRemoval = true)
+  private List<Child> children = new ArrayList<>();
+}
+
+@Entity
+public class Child {
+
+  @Id @GeneratedValue
+  private Long id;
+
+  @ManyToOne
+  @JoinColumn(name = "parent_id")
+  private Parent parent;
+}
+```
+
+* `고아 객체`란 부모 객체와 연관관계가 끊어진 자식 객체를 말한다.
+* `orphanRemoval = true`을 하면, 부모 엔티티와 연관관계가 끊어진 자식 엔티티를 자동으로 제거한다.
+  * `parent.getChildren().remove()`
+     → 자식 엔티티를 컬렉션에서 제거하면, 자동으로 `DELETE SQL` 생성한다.
+* 자식 엔티티가 부모 엔티티에 종속되는 경우에만 사용한다.
+  * 특정 엔티티가 개인 소유할 때 사용가능하다. 
+  * 참조하는 곳이 하나일 때 사용가능하다.
+* `@OneToOne`, `@OneToMany` 연관관계에서만 가능하다.
+* 예) 특정 게시판을 삭제하면, 해당 게시판에 달린 댓글들을 함께 삭제된다.
+
+> **참고**
+> 부모 객체가 제거되면 자식 객체는 고아가 된다. 고아 객체 제거 기능을 활성화하면, 부모 객체를 제거하면 자식 객체도 함께 제거된다. `CascadeType.REMOVE`처럼 동작한다.
+
+> **참고**
+> `CascadeType.REMOVE`는 부모 엔티티가 제거되면 자식 엔티티를 제거한다.
+> `orphanRemoval = true`은 부모 엔티티와의 연관관계가 끊어지면 고아가 된 자식 엔티티를 제거한다.
+> 부모 엔티티를 제거할 때는 동일하게 동작하지만, `orphanRemoval = true`은 부모 엔티티가 살아있어도 자식 엔티티를 지울 수 있다.
+
+### 영속성 전이 + 고아 객체
+* `CascadeType.ALL` + `orphanRemoval = true`
+* 부모 엔티티를 통해서 자식의 생명 주기를 관리할 수 있다.
+  * `Child`는 `Repository`가 없어도 `Parent`를 통해 관리할 수 있다.
+
+---
