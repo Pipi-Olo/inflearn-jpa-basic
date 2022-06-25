@@ -758,3 +758,89 @@ public class Product {
   * `(mappedBy = "product")` → `Order.product`가 연관관계 주인이다.
 
 --- 
+
+# 고급 매핑
+## 상속관계 매핑
+* 관계형 데이터베이스는 상속 관계가 없다.
+* 객체의 상속은 데이터베이스의 슈퍼타입 / 서브타입 논리 모델링 기법으로 매핑한다.
+  * `@Inheritance(strategy = InheritanceType.XXX)` → 물리 모델로 구현하는 방법 3가지
+    * `JOINED` : 조인 전략 
+    * `SINGLE_TABLE` : 단일 테이블 전략
+    * `TABLE_PER_CLASS` : 구현 클래스마다 테이블 전략
+  * `@DiscriminatorColumn(name="DTYPE")`
+    * 부모 클래스에서 작성한다.
+    * 자식 클래스들을 구별한 Column을 추가한다.
+    * `DTYPE`은 항상 있는 것이 좋다.
+      * `SINGLE_TABLE` 전략은 필수이다.
+      * `JOINED` 전략은 필수는 아니지만, 있는 것이 좋다.
+  * `@DiscriminatorValue("XXX")`
+    * 자식 클래스에서 작성한다.
+    * 부모 테이블 `DTYPE`에 들어갈 값을 지정한다.
+    
+### JOINED 전략
+![](https://velog.velcdn.com/images/pipiolo/post/8f6e018c-79af-4084-a51a-381a42f8f142/image.png)
+
+* 조인을 통해 조회하는 방법으로 가장 정석적인 방법이다.
+* 장점
+  * 정규화된 테이블 구조
+  * 외래 키 잠조 무결성 제약조건 활용가능
+  * 효율적인 저장 공간
+* 단점
+  * 조회시 조인을 사용한다. 성능 저하를 유발할 수 있다.
+  * 데이터 저장시 INSERT SQL 2번 호출한다.
+
+### SINGLE_TABLE 전략
+![](https://velog.velcdn.com/images/pipiolo/post/d3134ab8-7fcb-4a85-946f-094c07d97b6e/image.png)
+
+* 상속 관계를 하나의 테이블에 컬럼으로 설계하는 방법이다.
+* 확장성이 필요없고 정말 단순한 구조에서 사용한다. 엔티티 구조가 변화하면 테이블의 많은 수정이 필요하다.
+* `DTYPE` 속성이 필수이다. 없으면 자식 엔티티를 구별할 수 없다.
+* 장점
+  * 조인이 필요없으므로 일반적으로 성능이 좋다.
+  * 조회 쿼리가 단순하다.
+* 단점
+  * 자식 엔티티가 매핑한 컬럼은 모두 `NULL`을 허용해야 한다.
+    * Album 엔티티가 저장될 경우, 그외 Movie, Book 엔티티의 속성들은 모두 `NULL`이다.
+  * 단일 테이블에 모든 매핑 정보를 입력하므로 테이블이 지나치게 커질 수 있다.
+
+### TABLE_PER_CLASS 전략
+![](https://velog.velcdn.com/images/pipiolo/post/63aa6ad8-52e2-4d4a-8dfa-5b2b5b8d8d1a/image.png)
+
+* 구현 클래스마다 각각 테이블을 생성하는 방법이다.
+* 부모 테이블(`Item`)이 없기 때문에 통합 관리가 어렵다.
+* 객체 개발자, 데이터베이스 설계자 모두 싫어하는 전략이다. <span style="color: #FF8C00">사용하지 말자.</span>
+* 장점
+  * 서브 타입을 명확하게 구분해서 처리할 때 효과적이다.
+  * `not null` 제약 조건이 가능하다.
+* 단점
+  * 여러 자식 테이블을 함께 조회할 때 성능이 느이다.
+  * 자식 테이블들을 통합해서 쿼리하기 어렵다.
+  
+> **정리**
+> 상속 관계 매핑 전략을 `옵션 1개`로 자유롭게 변경할 수 있다.
+> 부모 엔티티(`Item`)는 인스턴스가 필요없으므로 추상 클래스(`abstract class`)로 만든다.
+
+## @MappedSuperclass
+```java
+@MappedSuperclass
+public abstract class BasicEntity {
+
+  @Id @GeneratedValue
+  private Long id;
+  
+  private LocalDateTime createdAt;
+  
+  private LocalDateTime updatedAt;
+}
+```
+* 상속 받는 자식 클래스에 매핑 정보만 제공한다.
+  * 엔티티가 아니다.
+  * 별도 테이블이 생성되지 않는다.
+  * 상속 관계 매핑 전략과 관련 없다.
+* 전체 엔티티에서 공통적으로 필요한 정보들을 모아서 관리할 때 사용한다.
+* 직접 생성할 일이 없으므로 추상 클래스(`abstract class`)로 사용하자.
+
+> **참고**
+> `@Entity` 클래스는 `@MappedSuperclass` 혹은 `@Entity` 클래스만 상속 가능하다.
+
+---
