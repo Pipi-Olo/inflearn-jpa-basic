@@ -1140,3 +1140,305 @@ public class Member {
 >   * 객체 타입은 불변 객체로 만든다.
 
 ---
+
+# 객체지향 쿼리 언어
+## JPQL 이해
+```java
+String jpql = "select m from Member m";
+List<Member> members = em.createQuery(jpql, Member.class)
+        .getResultList();
+```
+
+* `JPQL`이란 엔티티 객체를 대상으로 검색하는 객체 지향 쿼리 언어(`Java Persistence Query Language`)이다.
+* `JPQL`은 `SQL`로 변환되어 데이터베이스에서 실행된다.
+* `JPQL`은 SQL을 추상화해서 특정 데이터베이스 SQL에 의존하지 않는다.
+  * 데이터베이스 방언을 사용해 SQL을 추상화 했다.
+  * 테이블을 대상으로 하는 `SQL`과 달리, `JPQL`은 엔티티 객체를 대상으로 한다.
+* 쿼리를 문자로 작성하기 때문에 동적 처리가 어렵다.
+  * 버그가 있으면, 런타임 오류가 발생한다.
+
+### QueryDSL
+```java
+JPAFactoryQuery query = new JPAQueryFactory(em);
+QMember member = QMember.member;
+
+List<Member> members = query
+         .select(member)
+         .from(member)
+         .where(member.age.gt(18))
+         .orderBy(member.name.desc())
+         .fetch();
+```
+* 문자가 아닌 자바 코드로 JPQL 쿼리를 작성하는 JPQL 빌더 역할을 한다.
+* 동적 쿼리 작성이 편리하며, 컴파일 시점에 문법 오류를 찾을 수 있다.
+* <span style="color: #FF8C00">실무에서 사용하자.</span>
+
+## JPQL 기본 문법
+![](https://velog.velcdn.com/images/pipiolo/post/3d2e93e3-1567-4043-acf3-063883a7453e/image.png)
+
+* 엔티티와 속성은 대소문자를 구분한다. (Member, age 등)
+* JPQL 키워드는 대소문자를 구분하지 않는다. (SELECT, from, WHERE 등)
+* 엔티티 이름을 사용한다. 테이블 이름이 아니다.
+* 별칭은 필수이다.
+  * `as`는 생략 가능하다.
+
+### TypeQuery, Query
+* TypeQuery → 반환 타입이 명확할 때 사용한다.
+  ```java
+  TypedQuery<Member> query = em.createQuery("SELECT m FROM Member m", Member.class);
+  ```
+* Query → 반환 타입이 명확하지 않을 때 사용한다.
+  ```java
+  Query query = em.createQuery("SELECT m.username, m.age FROM Member m");
+  ```
+  * `m.username` → String
+  * `m.age` → Integer 
+  * 어떤 타입으로 받아야 하는지 명확하지 않다.
+
+### 결과 조회 API
+* `query.getResultList()` → 리스트를 반환한다. 결과가 없으면 빈 리스트를 반환한다.
+* `query.getSingleResult()` → 결과가 정확히 하나일 때, 단일 객체 반환한다.
+  * 결과가 없으면 `NoResultException` 예외가 발생한다.
+  * 결과가 둘 이상이면 `NonUniqueResultException` 예외가 발생한다.
+  * `Spring Data JPA`는 `null` 혹은 `Optional`을 반환한다.
+    * 내부적으로 `try ~ catch`을 통해서 해결했다.
+
+### 파라미터 바인딩
+```java
+// 이름 기준 마라미터 바인딩
+Query query = em.createQuery("SELECT m FROM Member m where m.username =:username");
+query.setParameter("username", usernameParam);
+
+// 위치 기준 파라미터 바인딩
+Query query = em.createQuery("SELECT m FROM Member m where m.username =?1");
+query.setParameter(1, usernameParam);
+```
+* 파라미터 바인딩은 **이름 기준**으로 사용하자.
+* 위치가 변할 수 있기 때문에 위치 기준은 좋지 않다.
+
+### 프로젝션
+* `SELECT`에 조회할 대상을 지정한다.
+* 프로젝션 대상 → 엔티티, 임베디드 타입, 스칼라 타입(자바 기본 데이터 타입)
+* `DISTINCT`로 중복 제거 가능하다.
+* 예)
+  * `SELECT m FROM Member m` → 엔티티
+  * `SELECT m.team FROM Member m` → 엔티티
+  * `SELECT m.address FROM Member m` → 임베디드 타입
+  * `SELECT m.username, m.age FROM Member m` → 스칼라 타입
+  
+#### 프로젝션 - 여러 값 조회
+`SELECT m.username, m.age FROM Member m`
+* Query 타입으로 조회
+* Object[] 타입으로 조회
+  ```java
+  List<Object[]> results = em.createQuery("SELECT m.username , m.age FROM Member m")
+          .getResultList();
+  ```
+* new 명령어 조회
+  ```java
+  List<MemberDTO> results = em.createQuery("SELECT new jpa.jpql.MemberDTO(m.username, m.age) FROM Member m")
+          .getResultList();
+  ```
+  * `DTO`로 바로 조회하는 방법이다. <span style="color: #FF8C00">이 방법을 사용하자.</span>
+  * 패키지 명을 포함한 클래스 명 입력한다.
+  * 해당 타입과 일치하는 생성자가 필요하다.
+  
+### 페이징 API
+```java
+List<Member> members = em.createQuery("SELECT m FROM Member m ORDER BY m.age desc", Member.class)
+        .setFirstResult(0)
+        .setMaxResults(10)
+        .getResultList();
+```
+* setFirstResult(int startPoint) → 조회 시작 위치를 지정한다.
+* setMaxResults(int maxResult) → 조회할 데이터 수를 지정한다.
+* 각 데이터베이스에 맞는 페이징 `SQL`을 생성한다.
+
+### 조인
+* 내부 조인
+  * `SELECT m FROM Member m [INNER] JOIN m.team t`
+* 외부 조인
+  * `SELECT m FROM Member m LEFT [OUTER] JOIN m.team t`
+* `ON`
+  * 조인 대상을 필터링 할 수 있다.
+    * `SELECT m FROM Member m LEFT JOIN m.team t on t.name = 'A'`
+  * 연관관계 없는 엔티티 외부 조인할 수 있다.
+    * `SELECT m, t FROM Member m LEFT JOIN Team t on m.username = t.name`
+* 세타 조인
+  * `SELECT count(m) FROM Member m, Team t WHERE m.name = t.name`
+  * 연관관계 없는 테이블들을 조인할 때 사용한다.
+ 
+### 서브 쿼리
+```sql
+SELECT m
+FROM Member m
+WHERE m.age > (SELECT avg(m2.age) FROM Meber m2)
+```
+
+#### 서브 쿼리 지원 함수
+```sql
+SELECT m
+FROM Member m
+WHERE exists (SELECT t FROM m.team t WHERE t.name = "teamA")
+```
+* [NOT] EXISTS → 서브 쿼리에 결과가 존재하면 참
+* {ALL | ANY | SOME}
+  * ALL → 모두 만족하면 참
+  * ANY | SOME → 조건을 하나라도 만족하면 참
+* [NOT] IN → 서브 쿼리 결과 중 하나라도 같으면 참
+
+#### 서브 쿼리 한계
+* JPA는 `WHERE`, `HAVING`에만 서브 쿼리를 지원한다.
+* Hibernate 구현체는 `SELECT`도 가능하다.
+* `FROM`은 서브 쿼리가 불가능하다.
+  * 조인으로 해결한다.
+  * 서브 쿼리 없이 데이터를 받아서, 애플리케이션에서 해결한다.
+  * `NativeSQL`을 사용한다.
+
+### 조건식 - CASE
+```sql
+SELECT
+    CASE WHEN m.age <= 10 THEN '학생요금'
+         WHEN m.age >= 60 THEN '경로요금'
+         ELSE '일반요금'
+    END
+FROM Member m
+```
+* `COALESCE` → 하나씩 조회해서 `null`이 아니면 반환한다.
+  * `SELECT COALESCE(m.username, '이름 없는 회원') FROM Member m`
+  * 사용자 이름이 없으면, '이름 없는 회원'을 반환한다.
+* `NULLIF` → 두 값이 같으면 `null`을 반환하고 다르면 첫번째 값을 반환한다.
+  * `SELECT NULLIF(m.username, '관리자') FROM Member m`
+  * 사용자 이름이 관리자면 `null`을 반환하고 나머지 경우는 본인의 이름을 반환한다.
+
+## 경로표현식
+![](https://velog.velcdn.com/images/pipiolo/post/e1d78b5c-1d07-43f0-ae3b-ceb4b06b8d60/image.png)
+
+* .(점)을 찍어 객체 그래프를 탐색한다.
+* `상태 필드`(state field) → 단순히 값을 저장하기 위한 필드
+  * 상태 필드는 경로 탐색의 끝이다. 더 이상 탐색할 수 없다.
+* 연관 필드(association field) → 연관관계를 위한 필드
+  * 묵시적 내부 조인이 발생한다. 테이블은 연관관계 엔티티 조회를 위해 외래키 조인이 필요하다.
+  * `단일 값 연관 필드` → `@ManyToOne`, `@OneToOne`, `@Entity`
+    * 탐색을 계속 할 수 있다.
+  * `컬렉션 값 연관 필드` → `@OneToMany`, `@ManyToMany`, `Collection`
+    * 더 이상 탐색할 수 없다.
+    * `SELECT t.members.username FROM Team t` 불가능하다. 컬렉션 값은 더 이상 탐색할 수 없다.
+    * 단, `FROM`에서 명시적 조인을 통해 별칭을 얻으면 별칭을 통한 탐색은 가능하다.
+      * `SELECT m.username FROM Team t JOIN t.members m`
+
+### 명시적 조인과 묵시적 조인
+* 명시적 조인 → `SELECT m FROM Member m JOIN m.team t`
+  * `JOIN` 키워드를 직접 사용한다.
+  * 묵시적 조인 대신에 명시적 조인을 사용하자.
+* 묵시적 조인 → `SELECT m.team FROM Member m`
+  * 경로 표현식에 의해 묵시적으로 `JOIN`이 발생한다. 
+  * 항상 내부 조인만 사용한다.
+  * <span style="color: #FF8C00">사용하지 말자.</span> 조인은 SQL 튜닝의 핵심이다. 조인이 일어나는 상황을 한 눈에 파악하기 어렵다.
+  
+## 페치 조인
+* 연관된 엔티티나 컬렉션을 SQL 한 번에 함께 조회하는 조인이다.
+* 데이터베이스 SQL 조인이 아니다.
+* `JPQL`에서 성능 최적화를 위해 제공하는 조인이다.
+* `[LEFT [OUTER] | INNER] JOIN FETCH`
+
+### N + 1 문제
+![](https://velog.velcdn.com/images/pipiolo/post/30f5765a-753e-4aad-baad-5be88c94c0aa/image.png)
+
+* `SELECT m FROM Member m`
+  * | 회원 | 팀 | 출처 |
+    | :-: | :-: | :-: |
+    | 회원1 | 팀A | 데이터베이스 (SQL)  |
+    | 회원2 | 팀A | 1차 캐시 |
+    | 회원3 | 팀B | 데이터베이스 (SQL) |
+  * `FetchType.LAZY`이므로 `Members`를 조회할 때, `Team`은 프록시 객체로 가져온다.
+  * 각 `Member`에서 `Team`에 접근할 때, 데이터베이스에 쿼리를 날린다.
+  * `Member`를 조회하는 쿼리 `1`개, `Team`을 조회하는 쿼리 `N`개 = `N + 1` 문제이다.
+* `SELECT m FROM Member m JOIN FETCH m.team`
+  * `SELECT m.*, t.* FROM Memberm INNER JOIN Team t ON m.team_id = t.id`
+  * 마치 즉시 로딩처럼 쿼리 한 번에 조회한다.
+  * Team은 프록시 객체가 아닌 진짜 객체가 들어간다.
+  
+### 컬렉션 페치 조인  
+![](https://velog.velcdn.com/images/pipiolo/post/fbc1c091-6e7c-4fdd-9d46-865275064c3b/image.png)
+
+* `SELECT t FROM Team t JOIN FETCH t.members WHERE t.name='팀A'`
+* `일대다 관계` 및 `컬렉션`에서 페치 조인은 데이터 중복이 발생한다.
+  * `팀A`인 `Team`은 1개밖에 없지만, 2개로 조회된다.
+  * 조회되는 `Team`의 주소도 같다.
+  * `Member`의 `ID` 및 `NAME`이 다르기 때문에, `SQL DISTINCT` 명령어도 소용없다.
+* `JPQL DISTINCT`의 2가지 기능
+  * `SQL DISTINCT` 명령어 추가한다.
+  * 애플리케이션에서 `엔티티 중복`을 제거한다.
+    * 같은 식별자를 가진 엔티티를 제거한다.
+    
+### 페치 조인과 일반 조인의 차이
+* `페치 조인`은 즉시 로딩처럼 연관된 엔티티 및 컬렉션을 한 번에 조회한다.
+  * 객체 그래프를 SQL 한 번에 조회하는 개념이다.
+  * JPQL은 결과를 반환할 때, 연관관계를 고려하지 않는다.
+* `일반 조인`은 연관된 엔티티를 함께 조회하지 않는다.
+  * `SELECT`에 지정한 엔티티만 조회한다.
+  * `Team` 엔티티만 조회하고 `Member` 엔티티는 조회하지 않는다.
+  
+### 페치 조인의 한계
+* 페치 조인 대상에는 별칭을 줄 수 없다.
+  * `SELECT t FROM Team t JOIN FETCH t.members m WHERE m.username='회원1'` ❌
+  * `team.getMembers()`의 객체 그래프 정의는 `Team`을 통해서 모든 `Member`에 접근한다.
+    * `WHERE`을 통해서 일부 `Member`만 조회하는 것은 전제에 어긋난다.
+  * 하이버네이트는 가능하지만, <span style="color: #FF8C00">사용하지 말자.</span>
+* 둘 이상의 컬렉션은 페치 조인할 수 없다.
+  * `1 : N` 관계도 데이터 중복이 일어난다. `1 : N : N`는 데이터 정합성이 깨진다.
+* `일대다`, `컬렉션` 페치 조인은 페이징 API를 사용할 수 없다.
+  * `일대일`, `다대일` 페치 조인은 페이징이 가능하다.
+  * 페이징 API는 데이터베이스 SQL에서 이루어지는데, `일대다` 및 `컬렉션` 페치 조인은 데이터 중복이 일어난다. 
+  * `JPQL DISTINCT`는 데이터베이스가 아닌, 애플리케이션에서 엔티티 중복을 제거한다.
+  * 하이버네이트는 경고 로그를 남기고 메모리에서 페이징한다.
+    * 데이터베이스 SQL은 페이징 쿼리가 없다.
+    * 모든 데이터를 조회해서 애플리케이션 메모리에서 페이징 시도한다.
+    * <span style="color: #FF8C00">사용하지 말자.</span>
+  * `다대일` 조인 페치로 변경해서 해결하자.
+
+> **정리**
+> 로딩 전략은 모두 지연 로딩으로 설정한다. 성능 최적화가 필요한 곳에 페치 조인을 적용한다.
+> 페치 조인은 객체 그래프를 유지할 때 효과적이다. 엔티티가 가진 모양이 아닌 전혀 다른 모양의 결과가 필요하다면 일반 조인으로 DTO로 반환하는 것이 효과적이다.
+  
+## Named 쿼리
+```java
+@Entity
+@NamedQuery(name = "Member.findByUsername",
+            query = "SELECT m FROM Member m WHERE m.username = :username")
+public class Member {
+    ...
+}
+
+em.createNamedQuery("Member.findByUsernmae", Member.class)
+    .setParameter("username", "회원1")
+    .getResultList();
+```
+
+* 미리 정의해서 이름을 부여해두고 사용하는 JPQL이다.
+* 정적 쿼리만 가능하다.
+* 애플리케이션 로딩 시점에 SQL로 변환해서 캐시에 저장해서 재사용한다.
+* 애플리케이션 로딩 시점에 쿼리를 검증한다.
+* `Spring Data JPA` Repository Interface의 `@Query`가 `Named 쿼리`이다.
+
+## 벌크연산
+```java
+String jpql = "UPDATE Member m SET m.age = 20";
+int resultCount = em.createQuery(jpql)
+       .executeUpdate();
+```
+
+* 한 번에 여러 데이터를 수정하거나 삭제할 때 사용한다.
+* JPA 변경 감지는 너무 많은 SQL을 실행한다.
+  * 변경된 엔티티가 100개면 UPDATE SQL이 100번 실행된다.
+* `executeUpdate()`는 변경된 엔티티 수를 반환한다.
+  * `UPDATE`, `DELETE`를 지원한다.
+  * 하이버네이트는 `SELECT`도 지원한다.
+* 벌크 연산은 영속성 컨텍스트를 무시하고 데이터베이스에 직접 쿼리한다.
+  * 영속성 컨텍스트와 데이터베이스에 저장된 데이터가 서로 다르다.
+  * 벌크 연산을 먼저 수행한다.
+    * 영속성 컨텍스트에 저장된 엔티티가 없으므로 `영속성 컨텍스트` = `데이터베이스`가 성립한다.
+  * 벌크 연산 수행 후, 영속성 컨텍스트를 초기화한다.
+    * 무조건 데이터베이스에서 조회하므로 `영속성 컨텍스트` = `데이터베이스`가 성립한다.
+---
